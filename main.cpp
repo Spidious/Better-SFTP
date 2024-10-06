@@ -3,9 +3,19 @@
 #include <string.h>
 #include <vector>
 #include <sstream>
+#include <filesystem>
 
 // TEMPORARY SOURCE DIRECTORY
-const std::string SRC_DIRECTORY = "C:\\Users\\luked\\Pi Cloud\\Documents\\CodeMan\\sftp\\testFile.txt";
+std::string SRC_DIRECTORY;
+std::string SRC_FILENAME;
+
+// Progress callback function
+int progressCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
+    if (ultotal > 0) {
+        std::cout << "\rUpload progress: " << (ulnow * 100 / ultotal) << "% complete" << std::flush;
+    }
+    return 0; // Return 0 to continue the transfer
+}
 
 void getInput(const std::string prompt, std::string * response) {
     // Ask the prompt 
@@ -17,31 +27,40 @@ void getInput(const std::string prompt, std::string * response) {
     std::getline(std::cin, *response);
 }
 
-/// @brief 
-/// @param curl 
+/// @brief Upload file to server
+/// @param curl curl variable
 void uploadFile(CURL *curl) {
     // Construct the remote file path based on the current URL
     char *effective_url;
     curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effective_url);
-    std::string remotePath = effective_url; // Get the current remote directory
-
-    // If the remote path doesn't end with '/', append the file name
-    if (remotePath.back() != '/') {
-        size_t lastSlash = remotePath.find_last_of('/');
-        remotePath = remotePath.substr(0, lastSlash + 1); // Ensure it ends with '/'
+    
+    // Check if effective_url is valid
+    if (!effective_url) {
+        std::cerr << "Failed to retrieve effective URL." << std::endl;
+        return;
     }
 
-    // Assuming you want to upload SRC_DIRECTORY as 'file' or 'directory'
-    remotePath += SRC_DIRECTORY.substr(SRC_DIRECTORY.find_last_of('/') + 1); // Get the filename from SRC_DIRECTORY
+    // Get the current remote directory
+    std::string remoteDir = effective_url; // Get the current remote directory
+    std::string fileName = SRC_DIRECTORY.substr(SRC_DIRECTORY.find_last_of('/') + 1); // Get the filename
+
+    // Construct the full remote URL for uploading the file
+    // std::string remotePath = remoteDir + "/" + SRC_FILENAME; TESTING TESTING
 
     // Set the SFTP upload options
     curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
-    curl_easy_setopt(curl, CURLOPT_URL, ("sftp://" + remotePath).c_str());
-    
+
+    curl_easy_setopt(curl, CURLOPT_URL, (remoteDir + std::string("/") + SRC_FILENAME).c_str());
+
     // Open the file for reading
-    FILE *hd_src = fopen(SRC_DIRECTORY.c_str(), "rb");
-    if (hd_src) {
-        curl_easy_setopt(curl, CURLOPT_READDATA, hd_src);
+    FILE *fd = fopen((SRC_DIRECTORY + "\\" + SRC_FILENAME).c_str(), "rb");
+    if (fd) {
+        curl_easy_setopt(curl, CURLOPT_READDATA, fd);
+
+        // Enable progress meter
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progressCallback);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, NULL);
 
         // Perform the upload
         CURLcode res = curl_easy_perform(curl);
@@ -52,13 +71,27 @@ void uploadFile(CURL *curl) {
         }
 
         // Clean up
-        fclose(hd_src);
+        fclose(fd);
     } else {
         std::cerr << "Failed to open file: " << SRC_DIRECTORY << std::endl;
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Check if a file path is provided
+    if (argc < 2) {
+        std::cerr << "No file path provided!" << std::endl;
+        return 1;
+    }
+
+    // Get the file path from command line arguments
+    std::string filePath = argv[1];
+
+    // Extract the file name from the path
+    std::filesystem::path pathObj(filePath);
+    SRC_FILENAME = pathObj.filename().string(); // Get the file name
+    SRC_DIRECTORY = pathObj.parent_path().string(); // Get the directory path
+
     CURL *curl;
     CURLcode res;
 
@@ -175,6 +208,7 @@ int main() {
                     // Too few arguments
                     std::cerr << "'cd' command requires a directory argument." << std::endl;
                 }
+                continue;
             }
 
             // HELP command
@@ -185,7 +219,7 @@ int main() {
                 std::cout << "  quit        : Exit the program without uploading" << std::endl;
                 std::cout << "  put         : Initiate transfer of file end exit program." << std::endl;
                 std::cout << std::endl;
-
+                continue;
             }
 
             // Base case, break with final command
@@ -196,9 +230,13 @@ int main() {
 
             // Base case, break with final command
             if (args[0] == "put") {
-                std::cout << "put <host> <dest>" << std::endl;
+                std::cout << std::endl << "Uploading File..." << std::endl;
+                uploadFile(curl);
+                std::cout << "Done!" << std::endl << std::endl;
                 break;
             }
+
+            std::cout << "Unknown command \"" << args[0] << "\"" << std::endl; 
 
         } while (true);
         
