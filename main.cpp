@@ -5,6 +5,12 @@
 #include <sstream>
 #include <filesystem>
 
+#define USER "luke"
+#define PASSWORD ""
+#define REMOTE "pi"
+#define KEYPATH "C:\\Users\\luked\\.ssh\\id_ed25519"
+#define DIRECTORY "."
+
 // TEMPORARY SOURCE DIRECTORY
 std::string SRC_DIRECTORY;
 std::string SRC_FILENAME;
@@ -101,16 +107,16 @@ int main(int argc, char* argv[]) {
     
     if(curl) {
         // Set the URL of the SFTP server
-        curl_easy_setopt(curl, CURLOPT_URL, "sftp://pi/."); // Connect to home directory without listing
+        curl_easy_setopt(curl, CURLOPT_URL, "sftp://REMOTE/DIRECTORY"); // Connect to home directory without listing
     
         // Suppress listing or fetching data
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
 
         // Provide user credentials
-        curl_easy_setopt(curl, CURLOPT_USERPWD, "luke:");  // Username with no password
+        curl_easy_setopt(curl, CURLOPT_USERPWD, "USER:PASSWORD");  // Username with no password
         
         // Specify the private key file for authentication
-        curl_easy_setopt(curl, CURLOPT_SSH_PRIVATE_KEYFILE, "C:\\Users\\luked\\.ssh\\id_ed25519");
+        curl_easy_setopt(curl, CURLOPT_SSH_PRIVATE_KEYFILE, KEYPATH);
 
         // Perform the SFTP connection without listing the directory
         res = curl_easy_perform(curl);
