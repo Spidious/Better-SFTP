@@ -91,8 +91,6 @@ void uploadFile(CURL *curl) {
     curl_free(encodedFileName);
 }
 
-
-
 int main(int argc, char* argv[]) {
 
     // Check if a file path is provided
@@ -169,7 +167,7 @@ int main(int argc, char* argv[]) {
 
             // Declare variables to hold the current and previous URLs
             std::string currentUrl; // Holds the current URL
-            std::string previousUrl; // Holds the previous URL
+            std::string previousUrl; // Holds the previous URL 
             currentUrl = effective_url; // Set the initial current URL
             previousUrl = currentUrl; // Set the previous URL as the initial one
             // cd command
@@ -224,8 +222,76 @@ int main(int argc, char* argv[]) {
                         currentUrl = previousUrl; // Revert current URL to previous
                     }
                 } else if (args.size() > 2) {
-                    // Too many arguments
-                    std::cerr << "Too many arguments for 'cd' command." << std::endl;
+                    // Check if the first argument is a quote
+                    bool isQuoted = args[1][0] == '"' && args[args.size() - 1].back() == '"';
+
+                    std::string newDir;
+
+                    if (isQuoted) {
+                        // Combine all parts into a single path string, removing the quotes
+                        for (size_t i = 1; i < args.size(); ++i) {
+                            newDir += args[i];
+                            if (i + 1 < args.size()) {
+                                newDir += " ";  // Add space between words
+                            }
+                        }
+                        
+                        // Remove the surrounding quotes
+                        newDir = newDir.substr(1, newDir.size() - 2);
+                    } else {
+                        // If no quotes, just take the second argument
+                        newDir = args[1];
+                    }
+
+                    // Encode the newDir for URL
+                    char *encodedDir = curl_easy_escape(curl, newDir.c_str(), 0);
+
+                    // Construct the new URL based on the newDir
+                    std::string newUrl;
+
+                    // Check if newDir is an absolute path (starts with '/')
+                    if (newDir[0] == '/') {
+                        // Absolute path: directly append to sftp://pi
+                        newUrl = "sftp://" + REMOTE + encodedDir; 
+                    } else {
+                        currentUrl = (currentUrl[currentUrl.size() - 1] == '/') ? currentUrl : currentUrl + '/';
+
+                        // Relative path: append to the current URL
+                        size_t lastSlash = currentUrl.find_last_of('/');
+                        if (lastSlash != std::string::npos) {
+                            // Construct the new URL using the current URL and the newDir
+                            newUrl = currentUrl.substr(0, lastSlash + 1) + encodedDir; // Append to the current directory
+                        } else {
+                            // If at root, just append the newDir
+                            newUrl = "sftp://" + REMOTE + encodedDir; // Set the new directory
+                        }
+                    }
+
+                    // Remove any duplicate slashes
+                    if (newUrl.find("//", 7) != std::string::npos) {
+                        // Adjusts after the protocol (sftp://)
+                        newUrl.erase(newUrl.find("//", 7), 1);
+                    }
+
+                    // Set the new URL
+                    curl_easy_setopt(curl, CURLOPT_URL, newUrl.c_str());
+
+                    // Try to list the contents of the new directory to check if it exists
+                    CURLcode res = curl_easy_perform(curl);
+
+                    // Check if the directory exists
+                    if (res == CURLE_OK) {
+                        previousUrl = currentUrl; // Update previous URL only if successful
+                        currentUrl = newUrl; // Update the current URL
+                    } else {
+                        std::cerr << "Failed to change directory. Directory may not exist: " 
+                                << curl_easy_strerror(res) << std::endl;
+
+                        // Revert to the previous valid URL
+                        curl_easy_setopt(curl, CURLOPT_URL, previousUrl.c_str());
+                        currentUrl = previousUrl; // Revert current URL to previous
+                    }
+                    continue;
                 } else {
                     // Too few arguments
                     std::cerr << "'cd' command requires a directory argument." << std::endl;
