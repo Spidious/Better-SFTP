@@ -15,6 +15,7 @@ I have found this [github page](https://docs.github.com/en/authentication/connec
 *Currently this only works WITHOUT a password*
 
 For this application to work your remote must accept SSH key verification with your public key:
+
 1. run  `nano ~/.ssh/authorized_keys` on the remote.
 2. Paste the contents of your public key `.pub` that you just generated directly into the file.
 3. Save and exit the file and then exit the server. When you ssh back into the remote it should just connect right away.
@@ -63,9 +64,6 @@ This application was designed with the idea of right clicking the desired applic
      In the right pane, double-click on (Default) and set its value to:
 
      `"<AppFolder>/launchSFTP.bat" "%1"`
-
-
-
 4) Testing
 
    - Now, right-click any file in Windows Explorer.
@@ -73,18 +71,27 @@ This application was designed with the idea of right clicking the desired applic
    - When you click it, your script should launch, receiving the selected file's path as an argument.
 
 ### Updating main.cpp
+
 In the main function, the connection parameters are set using the `curl_easy_setopt` methods.
 *You must make sure you have installed a method to compile C++ code (msys2 with mingw) and installed libcurl*
-1. Change the remote to `sftp://<remote>/.`
-2. Set the user credentials `<user>:`
-3. Set the path to your local *private* key
-4. Compile the code `g++ -o sftp.exe main.cpp -lcurl`
+
+1. Change the configuration at the top of the `main.cpp` file
+2. Compile the code `g++ -o sftp.exe main.cpp -lcurl`
+
+##### Install libcurl
+
+This assumes you are  using MSYS2 with MinGW
+
+```plaintext
+pacman -Syu
+pacman -S mingw-w64-x86_64-curl
+```
 
 ### Notes
 
 Additional notes about installing and modifying the application
 
 #### Context Menu
-Inside the registry editor you can add extra features such as an icon. 
-See other installed applications for reference
 
+Inside the registry editor you can add extra features such as an icon.
+See other installed applications for reference

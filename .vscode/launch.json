@@ -8,7 +8,7 @@
         "type": "cppdbg",
         "request": "launch",
         "program": "${workspaceFolder}/main.exe",
-        "args": [],
+        "args": ["\"D:\\DISC RIPS\\DVD\\Beetlejuice\\Beetlejuice-A1 T00.mp4\""],
         "stopAtEntry": false,
         "cwd": "${workspaceFolder}",
         "environment": [],

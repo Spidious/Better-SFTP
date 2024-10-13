@@ -1,17 +1,16 @@
 #include <iostream>
-#include <curl/curl.h>
 #include <string.h>
 #include <vector>
 #include <sstream>
 #include <filesystem>
+#include <curl/curl.h>
 
-#define USER "luke"
-#define PASSWORD ""
-#define REMOTE "pi"
-#define KEYPATH "C:\\Users\\luked\\.ssh\\id_ed25519"
-#define DIRECTORY "."
+std::string const USER = "USER";
+std::string const PASSWORD = "PASSWORD";
+std::string const REMOTE = "SERVER.local";
+std::string const KEYPATH = "KEYDIR";
+std::string const DIRECTORY = "LOGINDIR";
 
-// TEMPORARY SOURCE DIRECTORY
 std::string SRC_DIRECTORY;
 std::string SRC_FILENAME;
 
@@ -35,55 +34,67 @@ void getInput(const std::string prompt, std::string * response) {
 
 /// @brief Upload file to server
 /// @param curl curl variable
+#include <iostream>
+#include <curl/curl.h>
+
+/// @brief Upload file to server
+/// @param curl curl variable
+#include <iostream>
+#include <curl/curl.h>
+
+/// @brief Upload file to server
+/// @param curl curl variable
 void uploadFile(CURL *curl) {
-    // Construct the remote file path based on the current URL
+    // Get the effective base URL from the CURL object
     char *effective_url;
     curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effective_url);
-    
-    // Check if effective_url is valid
+
     if (!effective_url) {
         std::cerr << "Failed to retrieve effective URL." << std::endl;
         return;
     }
 
-    // Get the current remote directory
-    std::string remoteDir = effective_url; // Get the current remote directory
-    std::string fileName = SRC_DIRECTORY.substr(SRC_DIRECTORY.find_last_of('/') + 1); // Get the filename
+    // Extract the filename from the local path
+    std::string fileName = SRC_FILENAME;  // e.g., "Beetlejuice-A1 T00.mp4"
 
-    // Construct the full remote URL for uploading the file
-    // std::string remotePath = remoteDir + "/" + SRC_FILENAME; TESTING TESTING
+    // Encode the filename (for spaces or special characters)
+    char *encodedFileName = curl_easy_escape(curl, fileName.c_str(), 0);
 
-    // Set the SFTP upload options
-    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+    // Construct the final remote path
+    std::string remotePath = std::string(effective_url) + "/" + encodedFileName;
 
-    curl_easy_setopt(curl, CURLOPT_URL, (remoteDir + std::string("/") + SRC_FILENAME).c_str());
-
-    // Open the file for reading
+    // Open the local file for reading
     FILE *fd = fopen((SRC_DIRECTORY + "\\" + SRC_FILENAME).c_str(), "rb");
-    if (fd) {
-        curl_easy_setopt(curl, CURLOPT_READDATA, fd);
-
-        // Enable progress meter
-        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progressCallback);
-        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, NULL);
-
-        // Perform the upload
-        CURLcode res = curl_easy_perform(curl);
-        
-        // Check for errors
-        if (res != CURLE_OK) {
-            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-        }
-
-        // Clean up
-        fclose(fd);
-    } else {
-        std::cerr << "Failed to open file: " << SRC_DIRECTORY << std::endl;
+    if (!fd) {
+        std::cerr << "Failed to open file locally." << std::endl;
+        curl_free(encodedFileName);
+        return;
     }
+
+    // Configure CURL for file upload
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+    curl_easy_setopt(curl, CURLOPT_URL, remotePath.c_str());
+    curl_easy_setopt(curl, CURLOPT_READDATA, fd);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progressCallback);
+
+    // Perform the upload
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+    } else {
+        std::cout << "File uploaded successfully!" << std::endl;
+    }
+
+    // Clean up
+    fclose(fd);
+    curl_free(encodedFileName);
 }
 
+
+
 int main(int argc, char* argv[]) {
+
     // Check if a file path is provided
     if (argc < 2) {
         std::cerr << "No file path provided!" << std::endl;
@@ -107,16 +118,16 @@ int main(int argc, char* argv[]) {
     
     if(curl) {
         // Set the URL of the SFTP server
-        curl_easy_setopt(curl, CURLOPT_URL, "sftp://REMOTE/DIRECTORY"); // Connect to home directory without listing
+        curl_easy_setopt(curl, CURLOPT_URL, ("sftp://"+REMOTE+"/"+DIRECTORY).c_str()); // Connect to home directory without listing
     
         // Suppress listing or fetching data
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
 
         // Provide user credentials
-        curl_easy_setopt(curl, CURLOPT_USERPWD, "USER:PASSWORD");  // Username with no password
+        curl_easy_setopt(curl, CURLOPT_USERPWD, (USER+":"+PASSWORD).c_str());  // Username with no password
         
         // Specify the private key file for authentication
-        curl_easy_setopt(curl, CURLOPT_SSH_PRIVATE_KEYFILE, KEYPATH);
+        curl_easy_setopt(curl, CURLOPT_SSH_PRIVATE_KEYFILE, KEYPATH.c_str());
 
         // Perform the SFTP connection without listing the directory
         res = curl_easy_perform(curl);
@@ -126,6 +137,11 @@ int main(int argc, char* argv[]) {
 
         // Break response into array
         std::vector<std::string> args;
+
+        // Error handling
+        if(res != CURLE_OK) {
+            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        }
 
         // Ask for command
         do {
@@ -167,7 +183,7 @@ int main(int argc, char* argv[]) {
                     // Check if newDir is an absolute path (starts with '/')
                     if (newDir[0] == '/') {
                         // Absolute path: directly append to sftp://pi
-                        newUrl = "sftp://pi" + newDir; 
+                        newUrl = "sftp://" + REMOTE + newDir; 
                     } else {
                         currentUrl = (currentUrl[currentUrl.size()-1] == '/') ? currentUrl : currentUrl + '/';
 
@@ -178,7 +194,7 @@ int main(int argc, char* argv[]) {
                             newUrl = currentUrl.substr(0, lastSlash + 1) + newDir; // Append to the current directory
                         } else {
                             // If at root, just append the newDir
-                            newUrl = "sftp://pi/" + newDir; // Set the new directory
+                            newUrl = "sftp://" + REMOTE + newDir; // Set the new directory
                         }
                     }
 
@@ -245,12 +261,8 @@ int main(int argc, char* argv[]) {
             std::cout << "Unknown command \"" << args[0] << "\"" << std::endl; 
 
         } while (true);
-        
-        // Error handling
-        if(res != CURLE_OK) {
-            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-        }
 
+        
         curl_easy_cleanup(curl);
     }
 
